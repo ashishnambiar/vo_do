@@ -12,14 +12,22 @@ class _MainScreenState extends State<MainScreen> {
   final TextEditingController text = TextEditingController();
   final FocusNode listFocus = FocusNode();
   final FocusNode textFocus = FocusNode();
+  final ScrollController scroll = ScrollController();
 
-  List<String> todos = [];
+  List<TileItem> todos = [];
 
   addItem() {
     setState(() {
-      todos.add(text.text);
+      todos.add(TileItem(text.text));
       text.clear();
       textFocus.requestFocus();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      scroll.animateTo(
+        scroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -28,40 +36,122 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     FocusManager.instance.addListener(
       () {
-        print("FOCUS list ${listFocus.hasFocus}");
-        print("FOCUS text ${textFocus.hasFocus}");
+        WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+          setState(() {});
+        });
       },
     );
   }
+
+  erasePreviousWord() {
+    List<String> words =
+        text.text.substring(0, text.selection.baseOffset).split(" ");
+    if (words.length < 2) {
+      text.text = text.text.substring(text.selection.baseOffset);
+      text.selection = const TextSelection.collapsed(offset: 0);
+      return;
+    }
+    final w = words.sublist(0, words.length - 1).join(" ");
+    text.text = w + text.text.substring(text.selection.baseOffset);
+    text.selection = TextSelection.collapsed(offset: w.length);
+  }
+
+  eraseBeforeCursor() => text
+    ..text = text.text.substring(text.selection.baseOffset)
+    ..selection = const TextSelection.collapsed(
+        offset: 0, affinity: TextAffinity.downstream);
+
+  eraseAfterCursor() =>
+      text.text = text.text.substring(0, text.selection.baseOffset);
 
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
       shortcuts: {
         const SingleActivator(
-          LogicalKeyboardKey.enter,
-          shift: true,
+          LogicalKeyboardKey.tab,
         ): VoidCallbackIntent(
           () {
-            print("hello");
+            if (listFocus.hasFocus) {
+              textFocus.requestFocus();
+            }
+            if (textFocus.hasFocus) {
+              listFocus.requestFocus();
+            }
           },
         ),
       },
       child: Scaffold(
-        appBar: AppBar(title: Text("Vo-Do")),
+        appBar: AppBar(
+          title: Text("Vo-Do"),
+        ),
         body: Center(
           child: Column(
             children: [
               Expanded(
-                child: Focus(
-                  focusNode: listFocus,
-                  child: ListView.builder(
-                    itemCount: todos.length,
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text("$index) ${todos[index]}"),
-                      );
-                    },
+                child: Shortcuts(
+                  shortcuts: {
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyJ,
+                    ): VoidCallbackIntent(
+                      () {
+                        if (todos.isNotEmpty) {
+                          todos.first.focus.requestFocus();
+                        }
+                      },
+                    ),
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyK,
+                    ): VoidCallbackIntent(
+                      () {
+                        if (todos.isNotEmpty) {
+                          todos.last.focus.requestFocus();
+                        }
+                      },
+                    ),
+                  },
+                  child: Focus(
+                    focusNode: listFocus,
+                    child: ListView.builder(
+                      controller: scroll,
+                      itemCount: todos.length,
+                      itemBuilder: (context, index) {
+                        return Shortcuts(
+                          shortcuts: {
+                            const SingleActivator(
+                              LogicalKeyboardKey.keyJ,
+                            ): VoidCallbackIntent(
+                              () {
+                                if (index < (todos.length - 1)) {
+                                  todos[index + 1].focus.requestFocus();
+                                } else {
+                                  textFocus.requestFocus();
+                                }
+                              },
+                            ),
+                            const SingleActivator(
+                              LogicalKeyboardKey.keyK,
+                            ): VoidCallbackIntent(
+                              () {
+                                if (index > 0) {
+                                  todos[index - 1].focus.requestFocus();
+                                } else {
+                                  textFocus.requestFocus();
+                                }
+                              },
+                            ),
+                          },
+                          child: Focus(
+                            focusNode: todos[index].focus,
+                            child: ListTile(
+                              selectedTileColor: Colors.amber[100],
+                              selected: todos[index].focus.hasFocus,
+                              title: Text("$index) ${todos[index].item}"),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -72,11 +162,33 @@ class _MainScreenState extends State<MainScreen> {
                     const SingleActivator(
                       LogicalKeyboardKey.enter,
                       shift: true,
+                    ): VoidCallbackIntent(addItem),
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyU,
+                      control: true,
+                    ): VoidCallbackIntent(eraseBeforeCursor),
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyH,
+                      control: true,
                     ): VoidCallbackIntent(
-                      () {
-                        addItem();
-                      },
+                      () => text.selection = TextSelection.collapsed(
+                          offset: text.selection.baseOffset - 1),
                     ),
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyL,
+                      control: true,
+                    ): VoidCallbackIntent(
+                      () => text.selection = TextSelection.collapsed(
+                          offset: text.selection.baseOffset + 1),
+                    ),
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyK,
+                      control: true,
+                    ): VoidCallbackIntent(eraseAfterCursor),
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyW,
+                      control: true,
+                    ): VoidCallbackIntent(erasePreviousWord),
                   },
                   child: TextField(
                     controller: text,
@@ -85,7 +197,7 @@ class _MainScreenState extends State<MainScreen> {
                       addItem();
                     },
                     decoration: InputDecoration(
-                      filled: true,
+                      filled: textFocus.hasFocus,
                       fillColor: Colors.amber.withOpacity(.5),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
@@ -100,4 +212,10 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
   }
+}
+
+class TileItem {
+  TileItem(this.item);
+  String item;
+  FocusNode focus = FocusNode();
 }

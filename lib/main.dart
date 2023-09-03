@@ -10,7 +10,13 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
+      theme: ThemeData(
+        textTheme: TextTheme(
+          bodyMedium: TextStyle(fontSize: 18),
+          titleMedium: TextStyle(fontSize: 18),
+        ),
+      ),
       home: MainScreen(),
     );
   }
